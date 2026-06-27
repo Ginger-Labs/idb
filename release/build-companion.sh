@@ -30,6 +30,11 @@ die()  { printf '[build-companion] error: %s\n' "$*" >&2; exit 1; }
 
 cd "$NB_REPO_ROOT"
 
+# Keep stdout clean for the caller: this script's ONLY real-stdout output is the
+# final asset path (release.sh captures it via $(...)). Route everything else —
+# including ./build.sh's chatty stdout — to stderr; fd 3 carries the path.
+exec 3>&1 1>&2
+
 DIST="$NB_REPO_ROOT/Build/Distribution"
 
 # --- Build ----------------------------------------------------------------
@@ -42,6 +47,14 @@ else
       || die "missing build prerequisite: $tool — see release/RELEASING.md (H6)"
   done
   log "building companion $NB_COMPANION_VERSION via ./build.sh build (full build)"
+  # Force a fresh version stamp. idb_companion's own sources rarely change between
+  # releases, so an incremental build over a warm Build/ would skip recompiling it
+  # and ship a STALE kVersion — the BuildInfo.swift preBuildScript only runs when
+  # the target actually builds. Drop this project's intermediates so the companion
+  # (and idb-repl/IDBGRPCSwift/CompanionDiscovery) recompile and re-stamp; the FB
+  # frameworks live in a different project and stay cached. (The relocation proof
+  # below is the backstop if a stale stamp ever slips through.)
+  rm -rf "$NB_REPO_ROOT/Build/Intermediates/idb_companion.build"
   # NB_COMPANION_VERSION reaches the BuildInfo.swift run-script phase through the
   # environment; build.sh disables User Script Sandboxing so the phase can read it.
   export NB_COMPANION_VERSION
@@ -117,4 +130,4 @@ esac
 log "relocation proof OK — $ver_json"
 
 log "done: $ASSET ($(du -h "$ASSET" | cut -f1))"
-printf '%s\n' "$ASSET"
+printf '%s\n' "$ASSET" >&3

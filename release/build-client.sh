@@ -31,6 +31,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Keep stdout clean for the caller: this script's ONLY real-stdout output is the
+# final wheel path (release.sh captures it). Route pip/build chatter to stderr;
+# fd 3 carries the path.
+exec 3>&1 1>&2
+
 # python@3.12 specifically: the client calls asyncio.get_event_loop(), removed in 3.13+.
 PYTHON="${NB_PYTHON:-python3.12}"
 command -v "$PYTHON" >/dev/null 2>&1 || die "missing $PYTHON — see release/RELEASING.md (H6)"
@@ -79,4 +84,4 @@ if [[ "${NB_SKIP_VERIFY:-0}" != "1" ]]; then
 fi
 
 log "done: $WHEEL"
-printf '%s\n' "$WHEEL"
+printf '%s\n' "$WHEEL" >&3
