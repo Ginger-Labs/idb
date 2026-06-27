@@ -26,8 +26,10 @@ function supports_xattrs() {
 
 # Use build directory outside of repo if xattrs not supported (for Xcode compatibility)
 if supports_xattrs; then
+  FS_SUPPORTS_XATTRS=true
   BUILD_DIRECTORY="$(pwd)/Build"
 else
+  FS_SUPPORTS_XATTRS=false
   BUILD_DIRECTORY="/tmp/idb-build-$(basename "$(pwd)")"
   echo "Note: Using external build directory at $BUILD_DIRECTORY (xattrs not supported)"
   # idb_companion/project.yml hard-codes framework refs as
@@ -94,8 +96,16 @@ function generate_xcodeproj() {
   local xcodeproj_name="${project_name}.xcodeproj"
   local dest_path="${project_dir}/${xcodeproj_name}"
 
-  # Default to stripping xattrs for filesystem compatibility
-  local strip_xattrs="${XCODEGEN_STRIP_XATTRS:-true}"
+  # The xattr workaround generates into a temp dir and rewrites absolute paths
+  # back to relative with sed. That rewrite is only needed on filesystems that
+  # can't store xattrs (e.g. EdenFS); on a normal filesystem it is unnecessary,
+  # and for a project nested deeply under the repo root with sources in an
+  # ancestor dir (e.g. a git worktree under .claude/worktrees) the sed
+  # miscomputes the prefix and emits a broken `../../../../../../Users/...`
+  # group path — which Xcode later resolves to a doubled `/Users/.../Users/...`
+  # CpHeader path and the build fails. So only strip xattrs when the filesystem
+  # actually lacks support; allow an explicit override.
+  local strip_xattrs="${XCODEGEN_STRIP_XATTRS:-$([ "$FS_SUPPORTS_XATTRS" = false ] && echo true || echo false)}"
 
   if [[ "$strip_xattrs" == "true" ]] && has_ditto; then
     # Generate to temp dir outside filesystem, then copy without xattrs
@@ -236,6 +246,17 @@ function generate_proto() {
 function regenerate_projects() {
   check_xcodegen
 
+  # The IDBGRPCSwift target's sources (../IDBGRPCSwift/idb.{pb,grpc}.swift) are
+  # marked `optional: true` because they are generated. If they are absent when
+  # xcodegen runs, the IDBGRPCSwift target is generated with an EMPTY compile
+  # phase: it links its SwiftPM closure but compiles no Swift of its own, so no
+  # IDBGRPCSwift.swiftmodule is produced and `import IDBGRPCSwift` fails to
+  # resolve. Generate the proto first so xcodegen picks the sources up.
+  if [ ! -f "IDBGRPCSwift/idb.grpc.swift" ] || [ ! -f "IDBGRPCSwift/idb.pb.swift" ]; then
+    echo "Proto files not found, generating before project generation..."
+    generate_proto
+  fi
+
   echo "Generating FBSimulatorControl project from project.yml..."
   generate_xcodeproj "." "FBSimulatorControl"
   echo "Generating Shimulator project..."
@@ -363,6 +384,43 @@ function build_simulator_framework_bridge() {
     build
 }
 
+# Build the IDBGRPCSwift static framework as its own scheme.
+#
+# Xcode 26 only installs a staticlib framework's Swift module into
+# <name>.framework/Modules when that target is the *primary* build target.
+# Built merely as a link-time dependency of the idb_companion / idb-repl
+# schemes, the module-install step is skipped and the bundle ships no
+# .swiftmodule, so `import IDBGRPCSwift` fails to resolve. Building it
+# standalone first puts the module in the bundle; the later scheme builds find
+# it up-to-date (same settings) and leave the bundled module in place.
+function build_idbgrpcswift() {
+  invoke_xcodebuild \
+    ONLY_ACTIVE_ARCH=NO \
+    SWIFT_ENABLE_EXPLICIT_MODULES=NO \
+    -project idb_companion/idb_companion.xcodeproj \
+    -scheme IDBGRPCSwift \
+    -sdk macosx \
+    -derivedDataPath "$BUILD_DIRECTORY" \
+    -configuration Release \
+    build
+}
+
+# Build the CompanionDiscovery static framework as its own scheme, for the same
+# Xcode 26 reason as build_idbgrpcswift: a staticlib framework only installs its
+# Swift module into its bundle when built as the primary target. idb-repl links
+# it (embed:false) and `import CompanionDiscovery` would otherwise fail.
+function build_companiondiscovery() {
+  invoke_xcodebuild \
+    ONLY_ACTIVE_ARCH=NO \
+    SWIFT_ENABLE_EXPLICIT_MODULES=NO \
+    -project idb_companion/idb_companion.xcodeproj \
+    -scheme CompanionDiscovery \
+    -sdk macosx \
+    -derivedDataPath "$BUILD_DIRECTORY" \
+    -configuration Release \
+    build
+}
+
 function build_idb_companion() {
   check_protobuf
   build_idb_deps
@@ -378,6 +436,7 @@ function build_idb_companion() {
   build_target FBDeviceControl Release
   build_target CompanionLib Release
   build_target IDBCompanionUtilities Release
+  build_idbgrpcswift
   # Build idb_companion from its own project
   invoke_xcodebuild \
     ONLY_ACTIVE_ARCH=NO \
@@ -398,6 +457,10 @@ function build_idb_repl() {
     echo "Proto files not found, generating..."
     generate_proto
   fi
+  # Install the static frameworks' Swift modules into their bundles (see
+  # build_idbgrpcswift). idb-repl links both IDBGRPCSwift and CompanionDiscovery.
+  build_idbgrpcswift
+  build_companiondiscovery
   # Build the idb-repl CLI from the idb_companion project (shares IDBGRPCSwift).
   invoke_xcodebuild \
     ONLY_ACTIVE_ARCH=NO \

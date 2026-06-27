@@ -165,8 +165,23 @@ func FBiOSTargetStateFromStateString(_ stateString: FBiOSTargetStateString) -> F
 }
 
 /// The canonical string representations of the FBiOSTargetType enum.
-@_cdecl("FBiOSTargetTypeStringFromTargetType")
-func FBiOSTargetTypeStringFromTargetType(_ targetType: FBiOSTargetType) -> NSString {
+///
+/// Plain Swift `-> String`, deliberately NOT `@_cdecl`/`NSString`. The only
+/// callers are Swift (idb_companion), and they treat the result as a Swift
+/// `String` (`.lowercased()`, dictionary value).
+///
+/// Why not `@_cdecl`: a `@_cdecl` here emits a `@convention(c)` function whose
+/// Objective-C autoreleased-return bridging serializes the result type as
+/// `Optional<NSString>`, while the matching C header declaration imports as
+/// non-optional `NSString`. When a Swift caller binds to that C symbol, the
+/// consumer's *mandatory* SIL linker deserializes the bridging thunk and
+/// crashes on Xcode 26.3 / Swift 6.2 ("SILFunction type mismatch …
+/// Optional<NSString> != NSString" in MandatorySILLinker) while building
+/// idb_companion. A plain Swift function has no such bridging thunk, so the
+/// linked SIL is unambiguous. There are no Objective-C/C callers of this symbol
+/// anywhere in the tree, so dropping the C export (and its header declaration)
+/// is behavior-preserving.
+public func FBiOSTargetTypeStringFromTargetType(_ targetType: FBiOSTargetType) -> String {
   if targetType == .device {
     return "Device"
   }

@@ -65,6 +65,26 @@ minimal, behavior-preserving patches are required and must ride along on any re-
    `BuildInfo.swift` gets `kVersion` from `$NB_COMPANION_VERSION`, surfaced in
    `idb_companion --version` (which otherwise reports only build date/time).
 
+The next three are **Xcode 26.3 build fixes** — the pinned commit was authored against
+Xcode 27 beta and does not compile cleanly on 26.3 without them:
+
+4. **`FBControlCore/Management/FBiOSTarget.swift` + `.h`** — `FBiOSTargetTypeStringFromTargetType`
+   was `@_cdecl … -> NSString`; on Xcode 26.3 its bridged return (`Optional<NSString>` vs the
+   header's `NSString`) crashed the mandatory SIL linker when `idb_companion` linked it. It has
+   no C/ObjC callers, so it is now a plain Swift `-> String` and the C export is dropped
+   (behavior-preserving).
+5. **`idb_companion/project.yml`** — added a `CompanionDiscovery` static-framework target and
+   wired `idb-repl` to it. `idb-repl` (which `import`s `CompanionDiscovery`) was already broken
+   on upstream `nb`; it was just never reached before the build got this far.
+6. **`build.sh`** — generate the proto *before* generating projects (else `IDBGRPCSwift` is
+   generated with empty sources and emits no module); build `IDBGRPCSwift`/`CompanionDiscovery`
+   as their own schemes (Xcode 26 only installs a staticlib framework's `.swiftmodule` when it is
+   the primary build target); and only strip xattrs when the filesystem lacks them.
+
+Verified on Xcode 26.3: a clean `./build.sh build` succeeds, `build-companion.sh`'s relocation
+proof passes (runs `--version` from a different path), and `smoke-test.sh` passes
+(`idb ui describe-all` + `idb ui pinch` on a booted simulator).
+
 Build-env detail (not a source patch): `release/build-client.sh` pins `setuptools<81`
 in its build venv because the proto-gen plugin (`protoc_compiler_template.py`) imports
 `pkg_resources`, removed in setuptools 81+.

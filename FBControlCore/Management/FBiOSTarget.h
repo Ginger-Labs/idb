@@ -33,10 +33,9 @@ FOUNDATION_EXTERN FBiOSTargetStateString _Nonnull FBiOSTargetStateStringFromStat
  */
 FOUNDATION_EXTERN FBiOSTargetState FBiOSTargetStateFromStateString(FBiOSTargetStateString _Nonnull stateString);
 
-/**
- The canonical string representations of the FBiOSTargetType Enum.
- */
-FOUNDATION_EXTERN NSString *_Nonnull FBiOSTargetTypeStringFromTargetType(FBiOSTargetType targetType);
+// FBiOSTargetTypeStringFromTargetType is intentionally a Swift-only `-> String`
+// function (see FBiOSTarget.swift); its C/@_cdecl export was removed to avoid a
+// MandatorySILLinker crash on Xcode 26.3. It has no Objective-C/C callers.
 
 /**
  A Default Comparison Function that can be called for different implementations of FBiOSTarget.
