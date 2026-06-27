@@ -49,8 +49,10 @@ esac
 command -v gh >/dev/null 2>&1 || die "gh (GitHub CLI) not found"
 gh auth status >/dev/null 2>&1 || die "gh is not authenticated (run: gh auth login)"
 
-if [[ -n "$(git status --porcelain)" && "${NB_ALLOW_DIRTY:-0}" != "1" ]]; then
-  die "working tree is dirty — commit the build (incl. fork patches) first, or set NB_ALLOW_DIRTY=1"
+# Only tracked-file changes matter — stray untracked files (a PLAN doc, agent
+# worktrees, scratch) must not block a release.
+if [[ -n "$(git status --porcelain --untracked-files=no)" && "${NB_ALLOW_DIRTY:-0}" != "1" ]]; then
+  die "tracked files have uncommitted changes — commit the build (incl. fork patches) first, or set NB_ALLOW_DIRTY=1"
 fi
 
 NB_REPO_SLUG="${NB_REPO_SLUG:-$(git remote get-url origin \
