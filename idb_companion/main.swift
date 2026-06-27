@@ -584,7 +584,7 @@ private func archName() -> String {
 }
 
 private func logStartupInfo(_ logger: FBIDBLogger) {
-  logger.info().log("IDB Companion Built at \(kBuildDate) \(kBuildTime)")
+  logger.info().log("IDB Companion \(kVersion) Built at \(kBuildDate) \(kBuildTime)")
   logger.info().log("IDB Companion architecture \(archName())")
   logger.info().log("Invoked with args=\(FBCollectionInformation.oneLineDescription(from: ProcessInfo.processInfo.arguments)) env=\(envDescription())")
 }
@@ -596,7 +596,7 @@ private func idbMain() async -> Int32 {
     return 1
   }
   if arguments.contains("--version") {
-    writeJSONToStdOut(["build_time": kBuildTime, "build_date": kBuildDate])
+    writeJSONToStdOut(["version": kVersion, "build_time": kBuildTime, "build_date": kBuildDate])
     return 0
   }
 

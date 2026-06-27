@@ -121,6 +121,10 @@ targets:
           {
             date +'let kBuildDate = "%b %-d %Y"'
             date +'let kBuildTime = "%H:%M:%S"'
+            # NB release stamp: release/version.sh exports NB_COMPANION_VERSION,
+            # surfaced by `idb_companion --version`. Defaults to "dev" for plain
+            # local builds where the env var is unset.
+            echo "let kVersion = \"${NB_COMPANION_VERSION:-dev}\""
           } > "$DERIVED_FILE_DIR/BuildInfo.swift"
         # No inputFiles means Xcode runs this every build (the timestamp must
         # always be fresh).
