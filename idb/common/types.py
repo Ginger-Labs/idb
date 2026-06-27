@@ -18,7 +18,11 @@ from enum import Enum
 from io import StringIO
 from typing import IO, List, Optional, Set, Tuple, Union
 
-from python.migrations.py310 import StrEnum310
+# NB fork: upstream imports StrEnum310 from Meta-internal `python.migrations.py310`,
+# which is absent from the OSS tree (it breaks `import idb` entirely). On the
+# required python@3.12 it is exactly the stdlib StrEnum; alias it so the
+# TargetType definition below stays untouched.
+from enum import StrEnum as StrEnum310
 
 
 LoggingMetadata = dict[str, Optional[Union[str, list[str], int, float]]]

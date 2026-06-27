@@ -88,7 +88,16 @@ setuptools.setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    install_requires=["aiofiles", "grpclib >= 0.4.0", "protobuf", "treelib"],
+    # NB fork: pyre-extensions (idb/common/plugin.py imports ParameterSpecification)
+    # was missing from install_requires — Meta's Buck build supplies it out of band,
+    # so `pip install` of the OSS wheel left `import idb` broken without it.
+    install_requires=[
+        "aiofiles",
+        "grpclib >= 0.4.0",
+        "protobuf",
+        "treelib",
+        "pyre-extensions",
+    ],
     setup_requires=["grpcio-tools >= 1.29.0", "grpclib >= 0.3.2"],
     entry_points={"console_scripts": ["idb = idb.cli.main:main"]},
     python_requires=">=3.7",
