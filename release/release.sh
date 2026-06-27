@@ -66,8 +66,17 @@ log "releasing $NB_VERSION (tag $NB_TAG) from $NB_REPO_SLUG @ ${BUILD_SHA:0:9}  
 # --- 1. Build both halves -------------------------------------------------
 log "1/6  building companion bundle"
 COMPANION_TARBALL="$("$SELF_DIR/build-companion.sh")"     # builds + verifies relocatable + tars
-log "2/6  building client wheel"
+log "2/6  building client wheel + offline wheelhouse"
 WHEEL="$("$SELF_DIR/build-client.sh")"
+# Bundle the wheel + all its deps into a wheelhouse so the formula installs the
+# client fully offline at brew-install time (reproducible; no PyPI dependency,
+# and immune to Homebrew's network-restricted build sandbox).
+WHEELHOUSE="$NB_ARTIFACTS_DIR/idb-client-wheelhouse-${NB_VERSION}.tar.gz"
+wh_tmp="$(mktemp -d)"
+"${NB_PYTHON:-python3.12}" -m pip download "$WHEEL" -d "$wh_tmp" >&2
+cp "$WHEEL" "$wh_tmp/"
+COPYFILE_DISABLE=1 tar -czf "$WHEELHOUSE" -C "$wh_tmp" .
+rm -rf "$wh_tmp"
 
 # --- 2. Sign, then re-pack so the asset carries the final signatures ------
 log "3/6  signing distribution"
@@ -77,22 +86,22 @@ COPYFILE_DISABLE=1 tar -czf "$COMPANION_TARBALL" -C "$NB_REPO_ROOT/Build/Distrib
 
 # --- 3. Checksums + asset URLs -------------------------------------------
 COMPANION_SHA="$(shasum -a 256 "$COMPANION_TARBALL" | awk '{print $1}')"
-WHEEL_SHA="$(shasum -a 256 "$WHEEL" | awk '{print $1}')"
+WHEELHOUSE_SHA="$(shasum -a 256 "$WHEELHOUSE" | awk '{print $1}')"
 COMPANION_ASSET="$(basename "$COMPANION_TARBALL")"
-WHEEL_ASSET="$(basename "$WHEEL")"
+WHEELHOUSE_ASSET="$(basename "$WHEELHOUSE")"
 DL="https://github.com/$NB_REPO_SLUG/releases/download/$NB_TAG"
 COMPANION_URL="$DL/$COMPANION_ASSET"
-WHEEL_URL="$DL/$WHEEL_ASSET"
+WHEELHOUSE_URL="$DL/$WHEELHOUSE_ASSET"
 log "4/6  assets:"
 log "       $COMPANION_ASSET  sha256=$COMPANION_SHA"
-log "       $WHEEL_ASSET  sha256=$WHEEL_SHA"
+log "       $WHEELHOUSE_ASSET  sha256=$WHEELHOUSE_SHA"
 
 render_formula() {
   sed -e "s|@@VERSION@@|$NB_VERSION|g" \
       -e "s|@@COMPANION_URL@@|$COMPANION_URL|g" \
       -e "s|@@COMPANION_SHA@@|$COMPANION_SHA|g" \
-      -e "s|@@WHEEL_URL@@|$WHEEL_URL|g" \
-      -e "s|@@WHEEL_SHA@@|$WHEEL_SHA|g" \
+      -e "s|@@WHEELHOUSE_URL@@|$WHEELHOUSE_URL|g" \
+      -e "s|@@WHEELHOUSE_SHA@@|$WHEELHOUSE_SHA|g" \
       "$SELF_DIR/formula/idb.rb.tmpl" > "$1"
 }
 
@@ -107,11 +116,11 @@ create_or_update_release() {  # args: <target-commitish>
   local target="$1"
   if gh release view "$NB_TAG" --repo "$NB_REPO_SLUG" >/dev/null 2>&1; then
     log "5/6  release $NB_TAG exists — uploading assets (clobber)"
-    run gh release upload "$NB_TAG" --repo "$NB_REPO_SLUG" --clobber "$COMPANION_TARBALL" "$WHEEL"
+    run gh release upload "$NB_TAG" --repo "$NB_REPO_SLUG" --clobber "$COMPANION_TARBALL" "$WHEELHOUSE"
   else
     log "5/6  creating release $NB_TAG at ${target:0:9}"
     run gh release create "$NB_TAG" --repo "$NB_REPO_SLUG" --target "$target" \
-      --title "idb $NB_VERSION" --notes "$NOTES" "$COMPANION_TARBALL" "$WHEEL"
+      --title "idb $NB_VERSION" --notes "$NOTES" "$COMPANION_TARBALL" "$WHEELHOUSE"
   fi
 }
 
@@ -160,7 +169,7 @@ fi
 
 # --- Post-publish: confirm the asset URLs actually resolve ---------------
 if [[ "$NB_DRY_RUN" != "1" ]]; then
-  for u in "$COMPANION_URL" "$WHEEL_URL"; do
+  for u in "$COMPANION_URL" "$WHEELHOUSE_URL"; do
     code="$(curl -sIL -o /dev/null -w '%{http_code}' "$u" 2>/dev/null || echo 000)"
     case "$code" in
       200|302) log "     url ok ($code): $u";;

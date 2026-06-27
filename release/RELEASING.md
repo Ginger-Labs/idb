@@ -14,8 +14,8 @@ release ships **both halves in lockstep** — the `idb_companion` macOS binary a
 | Asset | From | Notes |
 |---|---|---|
 | `idb_companion-<version>-arm64.tar.gz` | `./build.sh build` → `Build/Distribution/` | self-contained, relocatable; arm64-only (see Limitations) |
-| `fb_idb-<version>-py3-none-any.whl` | `setup.py` (regenerates gRPC stubs) | pure Python; needs python@3.12 |
-| `idb.rb` | `release/formula/idb.rb.tmpl` | one formula, both halves |
+| `idb-client-wheelhouse-<version>.tar.gz` | `pip download` of the `fb-idb` wheel + its deps | the client and every dependency as wheels, so the formula installs **offline** (no PyPI at brew-install time, which the build sandbox would block) |
+| `idb.rb` | `release/formula/idb.rb.tmpl` | one formula, both halves; installs the client into a plain venv from the wheelhouse |
 
 ### Version scheme (single source: `release/version.sh`)
 - `NB_VERSION = 1.1.8-nb-<short-sha>` — used **everywhere**: git tag (`v$NB_VERSION`),
