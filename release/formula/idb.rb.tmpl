@@ -47,12 +47,15 @@ class Idb < Formula
     bin.install_symlink libexec/"idb_companion"
 
     # 2) Python client -> its own virtualenv inside libexec; expose `idb` on PATH.
-    #    Install the verified wheel file directly (no staging/unzip), letting pip
-    #    resolve its deps. cached_download is the sha256-checked file Homebrew
-    #    already fetched for the resource above.
     venv_dir = libexec/"venv"
     virtualenv_create(venv_dir, "python3.12")
-    system venv_dir/"bin/pip", "install", "--no-cache-dir", resource("fb-idb").cached_download
+    # Homebrew caches the resource as "<sha256>--fb_idb-….whl"; pip rejects that
+    # prefixed cache name as an invalid wheel filename. Copy it back to its real
+    # wheel filename first, then install (pip resolves the deps from PyPI).
+    fb_idb = resource("fb-idb")
+    wheel = buildpath/File.basename(fb_idb.url)
+    cp fb_idb.cached_download, wheel
+    system venv_dir/"bin/pip", "install", "--no-cache-dir", wheel
     bin.install_symlink venv_dir/"bin/idb"
   end
 
