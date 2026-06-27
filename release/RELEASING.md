@@ -91,15 +91,20 @@ in its build venv because the proto-gen plugin (`protoc_compiler_template.py`) i
 
 ---
 
-## Distribution mode
+## Distribution mode — use `tap`
 
-Pick one (see the plan for the trade-off). Both ship identical assets + an identical
-formula body; only where the formula file lives differs.
+**`url` mode does not work on current Homebrew.** Modern brew (≥ ~5.x) rejects
+installing a formula from a URL *or* a local file — `brew install <url>` and
+`brew install ./idb.rb` both fail with "Homebrew requires formulae to be in a tap."
+So the only viable consumer path is a **tap**:
 
-- **`tap`** (recommended): formula in a separate `Ginger-Labs/homebrew-nb` repo. Real
-  `brew upgrade` tracking. Requires the tap repo to exist + cloned locally.
-- **`url`**: formula committed to `Formula/idb.rb` in this fork; install from the raw
-  tagged URL. No second repo; `brew upgrade` does **not** track URL installs.
+- **`tap`** (required): formula in a separate `Ginger-Labs/homebrew-nb` repo. Install
+  `brew install ginger-labs/nb/idb`; `brew upgrade` tracking works. Needs the tap repo
+  created + cloned locally (export `NB_TAP_DIR`).
+
+`release.sh` still has a `url` branch (it commits `Formula/idb.rb` into the fork), but
+the resulting formula is **not consumer-installable** on modern brew — treat `url` as
+deprecated/publish-only. Both modes ship identical assets + formula body.
 
 ---
 
@@ -157,19 +162,25 @@ DISTRIB_MODE=… ./release/release.sh
 ## Consumer install
 
 ```sh
-# tap mode
 brew tap ginger-labs/nb
 brew install ginger-labs/nb/idb
-
-# url mode (pin the tag, never main)
-brew install https://raw.githubusercontent.com/Ginger-Labs/idb/v1.1.8-nb-<sha>/Formula/idb.rb
 ```
 
-**Migration (H8):** if anyone has the upstream tap installed, remove it first — it
-collides on the `idb_companion` binary name:
-```sh
-brew uninstall facebook/fb/idb-companion
-```
+**Migration (H8):**
+- If `fb-idb` was installed via pip, remove it first so its `idb` doesn't shadow the
+  brew one: `pip3 uninstall fb-idb` (the distribution is `fb-idb`, not `idb`).
+- If the upstream companion is installed, remove it — it collides on the
+  `idb_companion` binary name: `brew uninstall facebook/fb/idb-companion`.
+- Merely having the `facebook/fb` tap (without installing) is fine now that the formula
+  no longer declares `conflicts_with` (which modern brew refused to resolve against that
+  untrusted tap).
+
+**Command Line Tools:** the formula is **not bottled**, so brew installs it via its
+"from source" path and requires an up-to-date toolchain. On a machine with full Xcode
+selected (`xcode-select -p` → `…/Xcode.app`), a stale standalone CLT can still make brew
+error with *"A newer Command Line Tools release is available."* Fix by updating CLT
+(System Settings → Software Update) or removing the stale standalone copy
+(`sudo rm -rf /Library/Developer/CommandLineTools`; Xcode still provides the toolchain).
 
 Verify: `idb_companion --version` shows the NB version; `idb ui pinch --help` works.
 

@@ -26,8 +26,11 @@ class Idb < Formula
   depends_on :macos # companion links Apple's private CoreSimulator frameworks
   depends_on "python@3.12" # client uses asyncio.get_event_loop(), gone in 3.13+
 
-  # Upstream's facebook/fb/idb-companion installs a binary of the same name.
-  conflicts_with "idb-companion", because: "both install an idb_companion binary"
+  # Deliberately NO `conflicts_with "idb-companion"`: modern Homebrew refuses to
+  # load a conflicting formula from an untrusted tap (facebook/fb), which would
+  # break `brew install` for exactly our migration audience — anyone who has that
+  # tap. Homebrew's keg linking already blocks two formulae from owning the same
+  # `idb_companion` binary; RELEASING.md covers uninstalling the upstream one.
 
   # The pure-Python client wheel, built from the same pinned proto as the companion.
   resource "fb-idb" do
